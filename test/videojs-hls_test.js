@@ -1303,7 +1303,7 @@ test('can be disposed before finishing initialization', function() {
 });
 
 test('can be disposed before a source is set', function() {
-  var player = createPlayer(), readyHandlers = [];
+  var player = createPlayer();
   try {
     player.src({
       src: 'http://example.com/media.mp4',
