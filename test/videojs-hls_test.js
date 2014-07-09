@@ -1302,4 +1302,17 @@ test('can be disposed before finishing initialization', function() {
   }
 });
 
+test('can be disposed before a source is set', function() {
+  var player = createPlayer(), readyHandlers = [];
+  try {
+    player.src({
+      src: 'http://example.com/media.mp4',
+      type: 'video/mp4'
+    });
+    ok(true, 'did not throw an exception');
+  } catch (e) {
+    ok(false, 'threw an exception: ' + e);
+  }
+});
+
 })(window, window.videojs);
