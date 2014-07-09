@@ -126,26 +126,16 @@
       // reconstruct the first packet. The rest of the packets will be
       // parsed directly from data
       if (streamBufferByteCount > 0) {
-        if (data.byteLength + streamBufferByteCount < MP2T_PACKET_LENGTH) {
-          // the current data is less than a single m2ts packet, so stash it
-          // until we receive more
+        // we have enough data for an m2ts packet
+        // process it immediately
+        dataSlice = data.subarray(0, MP2T_PACKET_LENGTH - streamBufferByteCount);
+        streamBuffer.set(dataSlice, streamBufferByteCount);
 
-          // ?? this seems to append streamBuffer onto data and then just give up. I'm not sure why that would be interesting.
-          videojs.log('data.length + streamBuffer.length < MP2T_PACKET_LENGTH ??');
-          streamBuffer.readBytes(data, data.length, streamBuffer.length);
-          return;
-        } else {
-          // we have enough data for an m2ts packet
-          // process it immediately
-          dataSlice = data.subarray(0, MP2T_PACKET_LENGTH - streamBufferByteCount);
-          streamBuffer.set(dataSlice, streamBufferByteCount);
+        parseTSPacket(streamBuffer);
 
-          parseTSPacket(streamBuffer);
-
-          // reset the buffer
-          streamBuffer = new Uint8Array(MP2T_PACKET_LENGTH);
-          streamBufferByteCount = 0;
-        }
+        // reset the buffer
+        streamBuffer = new Uint8Array(MP2T_PACKET_LENGTH);
+        streamBufferByteCount = 0;
       }
 
       while (true) {
