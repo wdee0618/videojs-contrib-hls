@@ -1523,6 +1523,7 @@ test('skip segments if key requests fail more than once', function() {
 
   player.trigger('timeupdate');
 
+  tags.length = 0;
   tags.push({pts: 0, bytes: 1});
 
   // second segment
