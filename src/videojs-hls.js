@@ -413,7 +413,7 @@ videojs.Hls.prototype.loadSegment = function(segmentUri, offset) {
       mediaIndex: tech.mediaIndex,
       playlist: tech.playlists.media(),
       offset: offset,
-      bytes: this.response
+      bytes: new Uint8Array(this.response)
     });
     tech.drainBuffer();
 
@@ -457,6 +457,8 @@ videojs.Hls.prototype.drainBuffer = function(event) {
       return segmentBuffer.shift();
     } else if (!segment.key.bytes) {
       return;
+    } else {
+      bytes = videojs.Hls.decrypt(bytes, segment.key.bytes, mediaIndex + playlist.mediaSequence);
     }
   }
 
@@ -476,7 +478,7 @@ videojs.Hls.prototype.drainBuffer = function(event) {
   }
 
   // transmux the segment data from MP2T to FLV
-  this.segmentParser_.parseSegmentBinaryData(new Uint8Array(bytes));
+  this.segmentParser_.parseSegmentBinaryData(bytes);
   this.segmentParser_.flushTags();
 
   tags = [];
@@ -552,7 +554,7 @@ videojs.Hls.prototype.fetchKeys = function(playlist, index) {
           return;
         }
 
-        key.bytes = this.response || new Uint8Array([1]);
+        key.bytes = new Uint8Array(this.response);
         tech.fetchKeys(playlist, i++, url);
       });
       break;
