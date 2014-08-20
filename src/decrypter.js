@@ -214,9 +214,7 @@ decrypt = function(encrypted, key, initVector) {
   var
     encryptedView = new DataView(encrypted.buffer),
     platformEndian = new Uint32Array(encrypted.byteLength / 4),
-    keyView = new DataView(key.buffer),
-    platformKey = [keyView.getUint32(0), keyView.getUint32(4), keyView.getUint32(8), keyView.getUint32(12)],
-    decipher = new AES(platformKey),
+    decipher = new AES(Array.prototype.slice.call(key)),
     decrypted = new Uint8Array(encrypted.byteLength),
     decryptedView = new DataView(decrypted.buffer),
     decryptedBlock,

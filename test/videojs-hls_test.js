@@ -1331,11 +1331,15 @@ test('a new keys XHR is created when a previous key XHR finishes', function() {
       }]
     };
   };
+  // we're inject the media playlist, so drop the request
+  requests.shift();
 
   player.hls.playlists.trigger('loadedplaylist');
-  requests.pop().respond(200, new Uint8Array([1]).buffer);
-  strictEqual(requests.length, 2, 'a key XHR is created');
-  strictEqual(requests[1].url, player.hls.playlists.media().segments[1].key.uri, 'a key XHR is created with the correct uri');
+  // key response
+  requests[0].response = new Uint32Array([0, 0, 0, 0]).buffer;
+  requests.shift().respond(200, null, '');
+  strictEqual(requests.length, 1, 'a key XHR is created');
+  strictEqual(requests[0].url, player.hls.playlists.media().segments[1].key.uri, 'a key XHR is created with the correct uri');
 
   player.hls.playlists.media = oldMedia;
 });
@@ -1561,7 +1565,7 @@ test('the key is supplied to the decrypter in the correct format', function() {
                          'http://media.example.com/fileSequence52-B.ts\n');
 
 
-  videojs.Hls.decrypt = function(bytes, key, iv) {
+  videojs.Hls.decrypt = function(bytes, key) {
     keys.push(key);
     return new Uint8Array([0]);
   };
@@ -1572,7 +1576,9 @@ test('the key is supplied to the decrypter in the correct format', function() {
   standardXHRResponse(requests.pop());
 
   equal(keys.length, 1, 'only one call to decrypt was made');
-  deepEqual(keys[0], [0,1,2,3], 'the IV for the segment is the media sequence');
+  deepEqual(keys[0],
+            new Uint32Array([0, 0x01000000, 0x02000000, 0x03000000]),
+            'passed the specified segment key');
 
 });
 test('supplies the media sequence of current segment as the IV by default, if no IV is specified', function() {
@@ -1605,7 +1611,9 @@ test('supplies the media sequence of current segment as the IV by default, if no
   standardXHRResponse(requests.pop());
 
   equal(ivs.length, 1, 'only one call to decrypt was made');
-  equal(ivs[0], 5, 'the IV for the segment is the media sequence');
+  deepEqual(ivs[0],
+        new Uint32Array([0, 0, 0, 5]),
+        'the IV for the segment is the media sequence');
 });
 
 })(window, window.videojs);
