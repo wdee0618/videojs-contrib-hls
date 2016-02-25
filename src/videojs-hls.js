@@ -1349,11 +1349,14 @@ videojs.HlsHandler.prototype.updateEndHandler_ = function () {
   seekable = this.seekable();
   if (this.tech_.seeking() &&
       currentBuffered.length === 0) {
-    if (seekable.length &&
-        this.tech_.currentTime() < seekable.start(0)) {
-      var next = this.findNextBufferedRange_();
-      if (next.length) {
-        videojs.log('tried seeking to', this.tech_.currentTime(), 'but that was too early, retrying at', next.start(0));
+    var next = this.findNextBufferedRange_();
+    if (next.length) {
+      if (seekable.length &&
+          this.tech_.currentTime() < seekable.start(0)){
+        videojs.log('tried seeking to', this.tech_.currentTime(), 'but that was too early (A), retrying at', next.start(0));
+        this.tech_.setCurrentTime(next.start(0) + TIME_FUDGE_FACTOR);
+      } else if (next.start(0) - this.tech_.currentTime() <= 0.5) {
+        videojs.log('tried seeking to', this.tech_.currentTime(), 'but that was too early (B), retrying at', next.start(0));
         this.tech_.setCurrentTime(next.start(0) + TIME_FUDGE_FACTOR);
       }
     }
