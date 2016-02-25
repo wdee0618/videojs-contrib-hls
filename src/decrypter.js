@@ -296,11 +296,17 @@ AsyncStream = function() {
   this.timeout_ = null;
 };
 AsyncStream.prototype = new videojs.Hls.Stream();
-AsyncStream.prototype.processJob_ = function() {
-  this.jobs.shift()();
+AsyncStream.prototype.processJob_ = function(timerSetAt) {
+  var timeSpan = Date.now() - timerSetAt;
+
+  while (this.jobs.length && timeSpan > 0) {
+    this.jobs.shift()();
+    timeSpan -= this.delay;
+  }
+
   if (this.jobs.length) {
     this.timeout_ = setTimeout(this.processJob_.bind(this),
-                               this.delay);
+                               this.delay, Date.now());
   } else {
     this.timeout_ = null;
   }
@@ -309,7 +315,7 @@ AsyncStream.prototype.push = function(job) {
   this.jobs.push(job);
   if (!this.timeout_) {
     this.timeout_ = setTimeout(this.processJob_.bind(this),
-                               this.delay);
+                               this.delay, Date.now());
   }
 };
 
@@ -353,6 +359,7 @@ Decrypter.prototype.decryptChunk_ = function(encrypted, key, initVector, decrypt
     decrypted.set(bytes, encrypted.byteOffset);
   };
 };
+
 // the maximum number of bytes to process at one time
 Decrypter.STEP = 4 * 8000;
 
