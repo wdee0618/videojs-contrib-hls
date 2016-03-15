@@ -310,6 +310,8 @@ export default class HlsHandler extends Component {
 
     this.segments = new SegmentLoader({
       currentTime: () => this.tech_.currentTime(),
+      seekable: () => this.seekable(),
+      seeking: () => this.tech_.seeking(),
       mediaSource: this.mediaSource,
       withCredentials: this.options_.withCredentials
     });
