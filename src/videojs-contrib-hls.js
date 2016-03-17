@@ -261,6 +261,7 @@ export default class HlsHandler extends Component {
           this.tech_.preload() !== 'none') {
         this.loadingState_ = 'segments';
         this.segments.playlist(this.playlists.media());
+        this.segments.expired(this.playlists.expired_);
         this.segments.load();
       }
 
@@ -284,6 +285,7 @@ export default class HlsHandler extends Component {
       }
 
       this.segments.playlist(updatedPlaylist);
+      this.segments.expired(this.playlists.expired_);
       this.updateDuration(this.playlists.media());
 
       // update seekable
@@ -312,6 +314,7 @@ export default class HlsHandler extends Component {
       currentTime: () => this.tech_.currentTime(),
       seekable: () => this.seekable(),
       seeking: () => this.tech_.seeking(),
+      setCurrentTime: (a) => this.setCurrentTime(a),
       mediaSource: this.mediaSource,
       withCredentials: this.options_.withCredentials
     });
@@ -340,9 +343,7 @@ export default class HlsHandler extends Component {
     // Only attempt to create the source buffer if none already exist.
     // handleSourceOpen is also called when we are "re-opening" a source buffer
     // after `endOfStream` has been called (in response to a seek for instance)
-    if (!this.sourceBuffer) {
-      this.setupSourceBuffer_();
-    }
+    this.setupSourceBuffer_();
 
     // if autoplay is enabled, begin playback. This is duplicative of
     // code in video.js but is required because play() must be invoked
@@ -428,7 +429,7 @@ export default class HlsHandler extends Component {
     if (media.attributes && media.attributes.CODECS) {
       mimeType += '; codecs="' + media.attributes.CODECS + '"';
     }
-    this.sourceBuffer = this.mediaSource.addSourceBuffer(mimeType);
+    this.segments.mimeType(mimeType);
 
     // exclude any incompatible variant streams from future playlist
     // selection
@@ -453,7 +454,7 @@ export default class HlsHandler extends Component {
         !this.tech_.paused() &&
 
         // 3) the Media Source and Source Buffers are ready
-        this.sourceBuffer &&
+//        this.sourceBuffer &&
 
         // 4) the active media playlist is available
         media) {
@@ -603,9 +604,12 @@ export default class HlsHandler extends Component {
       // update the duration
       if (this.mediaSource.readyState !== 'open') {
         this.mediaSource.addEventListener('sourceopen', setDuration);
-      } else if (!this.sourceBuffer || !this.sourceBuffer.updating) {
-        this.mediaSource.duration = newDuration;
-        this.tech_.trigger('durationchange');
+      } else {
+        let updating = this.mediaSource.sourceBuffers.some((b) => b.updating);
+        if (!updating) {
+          this.mediaSource.duration = newDuration;
+          this.tech_.trigger('durationchange');
+        }
       }
     }
   }
@@ -615,11 +619,11 @@ export default class HlsHandler extends Component {
    * source. After this function is called, the tech should be in a
    * state suitable for switching to a different video.
    */
-  resetSrc_() {
+  /*resetSrc_() {
     if (this.sourceBuffer && this.mediaSource.readyState === 'open') {
       this.sourceBuffer.abort();
     }
-  }
+  }*/
 
   /**
   * Abort all outstanding work and cleanup.
@@ -633,7 +637,7 @@ export default class HlsHandler extends Component {
       this.segments.dispose();
     }
 
-    this.resetSrc_();
+//    this.resetSrc_();
     super.dispose();
   }
 
