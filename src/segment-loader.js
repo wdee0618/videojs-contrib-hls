@@ -219,9 +219,13 @@ export default class SegmentLoader extends videojs.EventTarget {
 
       this.mediaIndex -= mediaSequenceDiff;
     } else if (this.mediaSource_.duration === Infinity) {
+      if (this.mediaIndex !== null) {
+        this.mediaIndex -= 1;
+      }
+
       // EXPERIMENTAL: Force a timestampOffset calculation when changing renditions
       // in a live stream
-      this.currentTimeline_ = -1;
+      //this.currentTimeline_ = -1;
     }
 
     this.playlist_ = media;
