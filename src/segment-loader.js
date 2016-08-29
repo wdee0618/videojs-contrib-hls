@@ -218,12 +218,10 @@ export default class SegmentLoader extends videojs.EventTarget {
       let mediaSequenceDiff = media.mediaSequence - this.playlist_.mediaSequence;
 
       this.mediaIndex -= mediaSequenceDiff;
-      console.log('playlist 1', this.mediaIndex, mediaSequenceDiff);
     } else if (this.mediaSource_.duration === Infinity) {
       // EXPERIMENTAL: Force a timestampOffset calculation when changing renditions
       // in a live stream
       this.currentTimeline_ = -1;
-      console.log('playlist 2', this.mediaIndex);
     }
 
     this.playlist_ = media;
@@ -335,7 +333,6 @@ export default class SegmentLoader extends videojs.EventTarget {
     if (mediaIndex === null || buffered.length === 0) {
       // find the segment containing currentTime
       mediaIndex =  getMediaIndexForTime(playlist, currentTime, expired);
-      console.log('gMIFT', mediaIndex);
     } else {
       let bufferedTime = Math.max(0, lastBufferedEnd - currentTime);
 
@@ -352,7 +349,6 @@ export default class SegmentLoader extends videojs.EventTarget {
       }
 
       mediaIndex++;
-      console.log('++', mediaIndex);
     }
 
     let segment;
