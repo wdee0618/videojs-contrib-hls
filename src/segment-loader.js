@@ -148,6 +148,11 @@ export default class SegmentLoader extends videojs.EventTarget {
    * and reset to a default state
    */
   abort() {
+    if (this.mediaIndex !== null) {
+      this.mediaIndex--;
+    }
+    this.currentTimeline_ = -1;
+
     if (this.state !== 'WAITING') {
       return;
     }
@@ -181,7 +186,6 @@ export default class SegmentLoader extends videojs.EventTarget {
    * load a playlist and start to fill the buffer
    */
   load() {
-    this.mediaIndex = null;
     this.monitorBuffer_();
 
     // if we don't have a playlist yet, keep waiting for one to be
@@ -210,14 +214,16 @@ export default class SegmentLoader extends videojs.EventTarget {
   playlist(media, options = {}) {
     if (this.playlist_ &&
         this.playlist_.uri === media.uri &&
-        !isNaN(this.mediaIndex)) {
+        this.mediaIndex !== null) {
       let mediaSequenceDiff = media.mediaSequence - this.playlist_.mediaSequence;
 
       this.mediaIndex -= mediaSequenceDiff;
+      console.log('playlist 1', this.mediaIndex, mediaSequenceDiff);
     } else if (this.mediaSource_.duration === Infinity) {
       // EXPERIMENTAL: Force a timestampOffset calculation when changing renditions
       // in a live stream
       this.currentTimeline_ = -1;
+      console.log('playlist 2', this.mediaIndex);
     }
 
     this.playlist_ = media;
@@ -321,14 +327,15 @@ export default class SegmentLoader extends videojs.EventTarget {
     let lastBufferedEnd = buffered.length
       ? buffered.end(buffered.length - 1)
       : 0;
-console.log(arguments);
+
     if (!playlist.segments.length) {
       return;
     }
 
     if (mediaIndex === null || buffered.length === 0) {
       // find the segment containing currentTime
-      mediaIndex =  Math.max(0, Math.floor((currentTime - expired) / playlist.targetDuration));
+      mediaIndex =  getMediaIndexForTime(playlist, currentTime, expired);
+      console.log('gMIFT', mediaIndex);
     } else {
       let bufferedTime = Math.max(0, lastBufferedEnd - currentTime);
 
@@ -345,6 +352,7 @@ console.log(arguments);
       }
 
       mediaIndex++;
+      console.log('++', mediaIndex);
     }
 
     let segment;

@@ -230,6 +230,30 @@ export const seekable = function(playlist, expired) {
   return createTimeRange(start, end);
 };
 
+let isWholeNumber = function (num) {
+  return (num - Math.floor(num)) === 0;
+};
+
+let ceilLeastSignificantDigit = function(num) {
+  // If we have a whole number, just add 1 to it
+  if (isWholeNumber(num)) {
+    return num + 1;
+  }
+
+  let numDecimalDigits = num.toString().split('.')[1].length;
+
+  for (let i = 1; i <= numDecimalDigits; i++) {
+    let scale = Math.pow(10, i);
+    let temp = num * scale;
+
+    if (isWholeNumber(temp) ||
+        i === numDecimalDigits) {
+      let scale = Math.pow(10, i);
+      return ((num * scale) + 1) / scale;
+    }
+  }
+};
+
 /**
  * Determine the index of the segment that contains a specified
  * playback position in a media playlist.
@@ -246,97 +270,8 @@ export const seekable = function(playlist, expired) {
 export const getMediaIndexForTime_ = function(playlist, time, expired) {
   let i;
   let segment;
-  let originalTime = time;
   let numSegments = playlist.segments.length;
-  let lastSegment = numSegments - 1;
-  let startIndex;
-  let endIndex;
-  let knownStart;
-  let knownEnd;
 
-  if (!playlist) {
-    return 0;
-  }
-
-  // when the requested position is earlier than the current set of
-  // segments, return the earliest segment index
-  if (time < 0) {
-    return 0;
-  }
-
-  if (time === 0 && !expired) {
-    return 0;
-  }
-
-  expired = expired || 0;
-
-  // find segments with known timing information that bound the
-  // target time
-  for (i = 0; i < numSegments; i++) {
-    segment = playlist.segments[i];
-    if (segment.end) {
-      if (segment.end > time) {
-        knownEnd = segment.end;
-        endIndex = i;
-        break;
-      } else {
-        knownStart = segment.end;
-        startIndex = i + 1;
-      }
-    }
-  }
-
-  // time was equal to or past the end of the last segment in the playlist
-  if (startIndex === numSegments) {
-    return numSegments;
-  }
-
-  // use the bounds we just found and playlist information to
-  // estimate the segment that contains the time we are looking for
-  if (typeof startIndex !== 'undefined') {
-    // We have a known-start point that is before our desired time so
-    // walk from that point forwards
-    time = time - knownStart;
-    for (i = startIndex; i < (endIndex || numSegments); i++) {
-      segment = playlist.segments[i];
-      time -= segment.duration;
-
-      if (time < 0) {
-        return i;
-      }
-    }
-
-    if (i >= endIndex) {
-      // We haven't found a segment but we did hit a known end point
-      // so fallback to interpolating between the segment index
-      // based on the known span of the timeline we are dealing with
-      // and the number of segments inside that span
-      return startIndex + Math.floor(
-        ((originalTime - knownStart) / (knownEnd - knownStart)) *
-        (endIndex - startIndex));
-    }
-
-    // We _still_ haven't found a segment so load the last one
-    return lastSegment;
-  } else if (typeof endIndex !== 'undefined') {
-    // We _only_ have a known-end point that is after our desired time so
-    // walk from that point backwards
-    time = knownEnd - time;
-    for (i = endIndex; i >= 0; i--) {
-      segment = playlist.segments[i];
-      time -= segment.duration;
-
-      if (time < 0) {
-        return i;
-      }
-    }
-
-    // We haven't found a segment so load the first one if time is zero
-    if (time === 0) {
-      return 0;
-    }
-    return -1;
-  }
   // We known nothing so walk from the front of the playlist,
   // subtracting durations until we find a segment that contains
   // time and return it
@@ -348,7 +283,7 @@ export const getMediaIndexForTime_ = function(playlist, time, expired) {
 
   for (i = 0; i < numSegments; i++) {
     segment = playlist.segments[i];
-    time -= segment.duration;
+    time -= Math.min(playlist.targetDuration + 0.1, ceilLeastSignificantDigit(segment.duration));
     if (time < 0) {
       return i;
     }
