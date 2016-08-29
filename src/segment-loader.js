@@ -181,6 +181,7 @@ export default class SegmentLoader extends videojs.EventTarget {
    * load a playlist and start to fill the buffer
    */
   load() {
+    this.mediaIndex = null;
     this.monitorBuffer_();
 
     // if we don't have a playlist yet, keep waiting for one to be
@@ -188,8 +189,6 @@ export default class SegmentLoader extends videojs.EventTarget {
     if (!this.playlist_) {
       return;
     }
-
-    this.mediaIndex = null;
 
     // if we're in the middle of processing a segment already, don't
     // kick off an additional segment request
@@ -210,7 +209,8 @@ export default class SegmentLoader extends videojs.EventTarget {
    */
   playlist(media, options = {}) {
     if (this.playlist_ &&
-        this.playlist_.uri === media.uri) {
+        this.playlist_.uri === media.uri &&
+        !isNaN(this.mediaIndex)) {
       let mediaSequenceDiff = media.mediaSequence - this.playlist_.mediaSequence;
 
       this.mediaIndex -= mediaSequenceDiff;
@@ -321,7 +321,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     let lastBufferedEnd = buffered.length
       ? buffered.end(buffered.length - 1)
       : 0;
-
+console.log(arguments);
     if (!playlist.segments.length) {
       return;
     }
@@ -433,6 +433,9 @@ export default class SegmentLoader extends videojs.EventTarget {
         startOfSegment < this.sourceUpdater_.timestampOffset()) {
       request.timestampOffset = startOfSegment;
     }
+
+    this.currentTimeline_ = request.timeline;
+    this.mediaIndex = request.mediaIndex;
 
     this.loadSegment_(request);
   }
@@ -694,8 +697,6 @@ export default class SegmentLoader extends videojs.EventTarget {
     this.state = 'APPENDING';
     segmentInfo = this.pendingSegment_;
     segmentInfo.buffered = this.sourceUpdater_.buffered();
-    this.currentTimeline_ = segmentInfo.timeline;
-    this.mediaIndex = segmentInfo.mediaIndex;
 
     if (segmentInfo.timestampOffset !== this.sourceUpdater_.timestampOffset()) {
       this.sourceUpdater_.timestampOffset(segmentInfo.timestampOffset);
