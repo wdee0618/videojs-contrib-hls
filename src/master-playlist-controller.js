@@ -424,8 +424,9 @@ export default class MasterPlaylistController extends videojs.EventTarget {
 
     if (media !== this.masterPlaylistLoader_.media()) {
       this.masterPlaylistLoader_.media(media);
-      this.mainSegmentLoader_.sourceUpdater_.remove(this.tech_.currentTime() + 5,
+      this.mainSegmentLoader_.sourceUpdater_.remove(Math.min(this.tech_.duration(), this.tech_.currentTime() + 5),
                                                     Infinity);
+      this.mainSegmentLoader_.mediaIndex = null;
     }
   }
 

@@ -13,39 +13,6 @@ import window from 'global/window';
 const CHECK_BUFFER_DELAY = 500;
 
 /**
- * Updates segment with information about its end-point in time and, optionally,
- * the segment duration if we have enough information to determine a segment duration
- * accurately.
- *
- * @param {Object} playlist a media playlist object
- * @param {Number} segmentIndex the index of segment we last appended
- * @param {Number} segmentEnd the known of the segment referenced by segmentIndex
- */
-const updateSegmentMetadata = function(playlist, segmentIndex, segmentEnd) {
-  if (!playlist) {
-    return false;
-  }
-
-  let segment = playlist.segments[segmentIndex];
-  let previousSegment = playlist.segments[segmentIndex - 1];
-
-  if (segmentEnd && segment) {
-    segment.end = segmentEnd;
-
-    // fix up segment durations based on segment end data
-    if (!previousSegment) {
-      // first segment is always has a start time of 0 making its duration
-      // equal to the segment end
-      segment.duration = segment.end;
-    } else if (previousSegment.end) {
-      segment.duration = segment.end - previousSegment.end;
-    }
-    return true;
-  }
-  return false;
-};
-
-/**
  * Determines if we should call endOfStream on the media source based
  * on the state of the buffer or if appened segment was the final
  * segment in the playlist.
@@ -133,6 +100,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     this.bandwidth = settings.bandwidth;
     this.roundTrip = NaN;
     this.resetStats_();
+    this.mediaIndex = null;
 
     // private properties
     this.hasPlayed_ = settings.hasPlayed;
@@ -144,7 +112,6 @@ export default class SegmentLoader extends videojs.EventTarget {
     this.checkBufferTimeout_ = null;
     this.error_ = void 0;
     this.expired_ = 0;
-    this.timeCorrection_ = 0;
     this.currentTimeline_ = -1;
     this.xhr_ = null;
     this.pendingSegment_ = null;
@@ -222,6 +189,8 @@ export default class SegmentLoader extends videojs.EventTarget {
       return;
     }
 
+    this.mediaIndex = null;
+
     // if we're in the middle of processing a segment already, don't
     // kick off an additional segment request
     if (!this.sourceUpdater_ ||
@@ -240,6 +209,17 @@ export default class SegmentLoader extends videojs.EventTarget {
    * @param {PlaylistLoader} media the playlist to set on the segment loader
    */
   playlist(media, options = {}) {
+    if (this.playlist_ &&
+        this.playlist_.uri === media.uri) {
+      let mediaSequenceDiff = media.mediaSequence - this.playlist_.mediaSequence;
+
+      this.mediaIndex -= mediaSequenceDiff;
+    } else if (this.mediaSource_.duration === Infinity) {
+      // EXPERIMENTAL: Force a timestampOffset calculation when changing renditions
+      // in a live stream
+      this.currentTimeline_ = -1;
+    }
+
     this.playlist_ = media;
     this.xhrOptions_ = options;
 
@@ -337,73 +317,44 @@ export default class SegmentLoader extends videojs.EventTarget {
    * @returns {Object} a segment info object that describes the
    * request that should be made or null if no request is necessary
    */
-  checkBuffer_(buffered, playlist, currentTime) {
-    let currentBuffered = Ranges.findRange(buffered, currentTime);
-
-    // There are times when MSE reports the first segment as starting a
-    // little after 0-time so add a fudge factor to try and fix those cases
-    // or we end up fetching the same first segment over and over
-    if (currentBuffered.length === 0 && currentTime === 0) {
-      currentBuffered = Ranges.findRange(buffered,
-                                         currentTime + Ranges.TIME_FUDGE_FACTOR);
-    }
-
-    let bufferedTime;
-    let currentBufferedEnd;
-    let timestampOffset = this.sourceUpdater_.timestampOffset();
-    let segment;
-    let mediaIndex;
+  checkBuffer_(buffered, playlist, mediaIndex, hasPlayed, currentTime, expired) {
+    let lastBufferedEnd = buffered.length
+      ? buffered.end(buffered.length - 1)
+      : 0;
 
     if (!playlist.segments.length) {
       return;
     }
 
-    if (currentBuffered.length === 0) {
+    if (mediaIndex === null || buffered.length === 0) {
       // find the segment containing currentTime
-      mediaIndex = getMediaIndexForTime(playlist,
-                                        currentTime + this.timeCorrection_,
-                                        this.expired_);
+      mediaIndex =  Math.max(0, Math.floor((currentTime - expired) / playlist.targetDuration));
     } else {
-      // find the segment adjacent to the end of the current
-      // buffered region
-      currentBufferedEnd = currentBuffered.end(0);
-      bufferedTime = Math.max(0, currentBufferedEnd - currentTime);
+      let bufferedTime = Math.max(0, lastBufferedEnd - currentTime);
 
-      // if the video has not yet played only, and we already have
+      // if the video has not yet played once, and we already have
       // one segment downloaded do nothing
-      if (!this.hasPlayed_() && bufferedTime >= 1) {
+      if (!hasPlayed && bufferedTime >= 1) {
         return null;
       }
 
       // if there is plenty of content buffered, and the video has
       // been played before relax for awhile
-      if (this.hasPlayed_() && bufferedTime >= Config.GOAL_BUFFER_LENGTH) {
+      if (hasPlayed && bufferedTime >= Config.GOAL_BUFFER_LENGTH) {
         return null;
       }
-      mediaIndex = getMediaIndexForTime(playlist,
-                                        currentBufferedEnd + this.timeCorrection_,
-                                        this.expired_);
+
+      mediaIndex++;
     }
+
+    let segment;
+    let timestampOffset;
 
     if (mediaIndex < 0 || mediaIndex === playlist.segments.length) {
       return null;
     }
 
     segment = playlist.segments[mediaIndex];
-    let startOfSegment = duration(playlist,
-                                  playlist.mediaSequence + mediaIndex,
-                                  this.expired_);
-
-    // We will need to change timestampOffset of the sourceBuffer if either of
-    // the following conditions are true:
-    // - The segment.timeline !== this.currentTimeline
-    //   (we are crossing a discontinuity somehow)
-    // - The "timestampOffset" for the start of this segment is less than
-    //   the currently set timestampOffset
-    if (segment.timeline !== this.currentTimeline_ ||
-        startOfSegment < this.sourceUpdater_.timestampOffset()) {
-      timestampOffset = startOfSegment;
-    }
 
     return {
       // resolve the segment URL relative to the playlist
@@ -458,16 +409,12 @@ export default class SegmentLoader extends videojs.EventTarget {
     // see if we need to begin loading immediately
     let request = this.checkBuffer_(this.sourceUpdater_.buffered(),
                                     this.playlist_,
+                                    this.mediaIndex,
+                                    this.hasPlayed_(),
                                     this.currentTime_(),
-                                    this.timestampOffset_);
+                                    this.expired_);
 
     if (!request) {
-      return;
-    }
-
-    if (request.mediaIndex === this.playlist_.segments.length - 1 &&
-        this.mediaSource_.readyState === 'ended' &&
-        !this.seeking_()) {
       return;
     }
 
@@ -476,27 +423,15 @@ export default class SegmentLoader extends videojs.EventTarget {
                                   this.playlist_.mediaSequence + request.mediaIndex,
                                   this.expired_);
 
-    // Sanity check the segment-index determining logic by calcuating the
-    // percentage of the chosen segment that is buffered. If more than 90%
-    // of the segment is buffered then fetching it will likely not help in
-    // any way
-    let percentBuffered = Ranges.getSegmentBufferedPercent(startOfSegment,
-                                                          segment.duration,
-                                                          this.currentTime_(),
-                                                          this.sourceUpdater_.buffered());
-
-    if (percentBuffered >= 90) {
-      // Increment the timeCorrection_ variable to push the fetcher forward
-      // in time and hopefully skip any gaps or flaws in our understanding
-      // of the media
-      let correctionApplied =
-        this.incrementTimeCorrection_(this.playlist_.targetDuration / 2, 1);
-
-      if (correctionApplied && !this.paused()) {
-        this.fillBuffer_();
-      }
-
-      return;
+    // We will need to change timestampOffset of the sourceBuffer if either of
+    // the following conditions are true:
+    // - The segment.timeline !== this.currentTimeline
+    //   (we are crossing a discontinuity somehow)
+    // - The "timestampOffset" for the start of this segment is less than
+    //   the currently set timestampOffset
+    if (segment.timeline !== this.currentTimeline_ ||
+        startOfSegment < this.sourceUpdater_.timestampOffset()) {
+      request.timestampOffset = startOfSegment;
     }
 
     this.loadSegment_(request);
@@ -533,27 +468,6 @@ export default class SegmentLoader extends videojs.EventTarget {
       removeToTime = currentTime - 60;
     }
 
-    // If we are going to remove time from the front of the buffer, make
-    // sure we aren't discarding a partial segment to avoid throwing
-    // PLAYER_ERR_TIMEOUT while trying to read a partially discarded segment
-    for (let i = 0; i <= segmentInfo.playlist.segments.length; i++) {
-      // Loop through the segments and calculate the duration to compare
-      // against the removeToTime
-      let removeDuration = duration(segmentInfo.playlist,
-                                    segmentInfo.playlist.mediaSequence + i,
-                                    this.expired_);
-
-      // If we are close to next segment begining, remove to end of previous
-      // segment instead
-      let previousDuration = duration(segmentInfo.playlist,
-                                    segmentInfo.playlist.mediaSequence + (i - 1),
-                                    this.expired_);
-
-      if (removeDuration >= removeToTime) {
-        removeToTime = previousDuration;
-        break;
-      }
-    }
     return removeToTime;
   }
 
@@ -781,6 +695,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     segmentInfo = this.pendingSegment_;
     segmentInfo.buffered = this.sourceUpdater_.buffered();
     this.currentTimeline_ = segmentInfo.timeline;
+    this.mediaIndex = segmentInfo.mediaIndex;
 
     if (segmentInfo.timestampOffset !== this.sourceUpdater_.timestampOffset()) {
       this.sourceUpdater_.timestampOffset(segmentInfo.timestampOffset);
@@ -803,14 +718,9 @@ export default class SegmentLoader extends videojs.EventTarget {
 
     this.pendingSegment_ = null;
 
-    // add segment metadata if it we have gained information during the
-    // last append
-    let timelineUpdated = this.updateTimeline_(segmentInfo);
-
     this.trigger('progress');
 
     let currentMediaIndex = segmentInfo.mediaIndex;
-
     currentMediaIndex +=
       segmentInfo.playlist.mediaSequence - this.playlist_.mediaSequence;
 
@@ -827,102 +737,10 @@ export default class SegmentLoader extends videojs.EventTarget {
     if (isEndOfStream) {
       this.mediaSource_.endOfStream();
     }
-
-    // when seeking to the beginning of the seekable range, it's
-    // possible that imprecise timing information may cause the seek to
-    // end up earlier than the start of the range
-    // in that case, seek again
-    let seekable = this.seekable_();
-    let next = Ranges.findNextRange(this.sourceUpdater_.buffered(), currentTime);
-
-    if (this.seeking_() &&
-        currentBuffered.length === 0) {
-      if (seekable.length &&
-          currentTime < seekable.start(0)) {
-
-        if (next.length) {
-          videojs.log('tried seeking to', currentTime,
-                      'but that was too early, retrying at', next.start(0));
-          this.setCurrentTime_(next.start(0) + Ranges.TIME_FUDGE_FACTOR);
-        }
-      }
-    }
-
     this.state = 'READY';
 
-    if (timelineUpdated) {
-      this.timeCorrection_ = 0;
-      if (!this.paused()) {
-        this.fillBuffer_();
-      }
-      return;
-    }
-
-    // the last segment append must have been entirely in the
-    // already buffered time ranges. adjust the timeCorrection
-    // offset to fetch forward until we find a segment that adds
-    // to the buffered time ranges and improves subsequent media
-    // index calculations.
-    let correctionApplied = this.incrementTimeCorrection_(segmentInfo.duration, 4);
-
-    if (correctionApplied && !this.paused()) {
+    if (!this.paused()) {
       this.fillBuffer_();
     }
-  }
-
-  /**
-   * annotate the segment with any start and end time information
-   * added by the media processing
-   *
-   * @private
-   * @param {Object} segmentInfo annotate a segment with time info
-   */
-  updateTimeline_(segmentInfo) {
-    let segment;
-    let segmentEnd;
-    let timelineUpdated = false;
-    let playlist = segmentInfo.playlist;
-    let currentMediaIndex = segmentInfo.mediaIndex;
-
-    currentMediaIndex += playlist.mediaSequence - this.playlist_.mediaSequence;
-    segment = playlist.segments[currentMediaIndex];
-
-    // Update segment meta-data (duration and end-point) based on timeline
-    if (segment &&
-        segmentInfo &&
-        segmentInfo.playlist.uri === this.playlist_.uri) {
-      segmentEnd = Ranges.findSoleUncommonTimeRangesEnd(segmentInfo.buffered,
-                                                        this.sourceUpdater_.buffered());
-      timelineUpdated = updateSegmentMetadata(playlist,
-                                              currentMediaIndex,
-                                              segmentEnd);
-    }
-
-    return timelineUpdated;
-  }
-
-  /**
-   * add a number of seconds to the currentTime when determining which
-   * segment to fetch in order to force the fetcher to advance in cases
-   * where it may get stuck on the same segment due to buffer gaps or
-   * missing segment annotation after a rendition switch (especially
-   * during a live stream)
-   *
-   * @private
-   * @param {Number} secondsToIncrement number of seconds to add to the
-   * timeCorrection_ variable
-   * @param {Number} maxSegmentsToWalk maximum number of times we allow this
-   * function to walk forward
-   */
-  incrementTimeCorrection_(secondsToIncrement, maxSegmentsToWalk) {
-    // If we have already incremented timeCorrection_ beyond the limit,
-    // stop searching for a segment and reset timeCorrection_
-    if (this.timeCorrection_ >= this.playlist_.targetDuration * maxSegmentsToWalk) {
-      this.timeCorrection_ = 0;
-      return false;
-    }
-
-    this.timeCorrection_ += secondsToIncrement;
-    return true;
   }
 }
