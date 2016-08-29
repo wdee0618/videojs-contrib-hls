@@ -424,9 +424,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
 
     if (media !== this.masterPlaylistLoader_.media()) {
       this.masterPlaylistLoader_.media(media);
-      this.mainSegmentLoader_.sourceUpdater_.remove(Math.min(this.tech_.duration(), this.tech_.currentTime() + 5),
-                                                    Infinity);
-      this.mainSegmentLoader_.mediaIndex = null;
+      this.mainSegmentLoader_.clearBuffer();
     }
   }
 
@@ -573,6 +571,11 @@ export default class MasterPlaylistController extends videojs.EventTarget {
    * @return {TimeRange} the current time
    */
   setCurrentTime(currentTime) {
+    this.mainSegmentLoader_.clearBuffer();
+    if (this.audioPlaylistLoader_) {
+      this.audioSegmentLoader_.clearBuffer();
+    }
+
     let buffered = Ranges.findRange(this.tech_.buffered(), currentTime);
 
     if (!(this.masterPlaylistLoader_ && this.masterPlaylistLoader_.media())) {
