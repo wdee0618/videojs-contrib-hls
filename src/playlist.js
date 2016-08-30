@@ -288,10 +288,9 @@ export const getMediaIndexForTime_ = function(playlist, time, expired) {
       return i;
     }
   }
-  // We are out of possible candidates so load the last one...
-  // The last one is the least likely to overlap a buffer and therefore
-  // the one most likely to tell us something about the timeline
-  return lastSegment;
+
+  // We are out of possible candidates so load the first one...
+  return 0;
 };
 
 Playlist.duration = duration;
