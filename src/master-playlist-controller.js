@@ -162,8 +162,6 @@ export default class MasterPlaylistController extends videojs.EventTarget {
       let media = this.masterPlaylistLoader_.media();
       let requestTimeout = (this.masterPlaylistLoader_.targetDuration * 1.5) * 1000;
 
-      this.mainSegmentLoader_.abort();
-
       // If we don't have any more available playlists, we don't want to
       // timeout the request.
       if (this.masterPlaylistLoader_.isLowestEnabledRendition_()) {
@@ -346,7 +344,8 @@ export default class MasterPlaylistController extends videojs.EventTarget {
     let loader = track.getLoader(this.activeAudioGroup());
 
     if (!loader) {
-      this.mainSegmentLoader_.clearBuffer();
+      this.mainSegmentLoader_.resetMediaIndex();
+
       return;
     }
 
@@ -357,7 +356,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
     if (this.audioPlaylistLoader_.started) {
       this.audioPlaylistLoader_.load();
       this.audioSegmentLoader_.load();
-      this.audioSegmentLoader_.clearBuffer();
+      this.audioSegmentLoader_.resetMediaIndex();
       return;
     }
 
@@ -407,7 +406,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
       this.useAudio();
     });
 
-    this.audioSegmentLoader_.clearBuffer();
+    this.audioSegmentLoader_.resetMediaIndex();
     this.audioPlaylistLoader_.start();
   }
 
@@ -424,7 +423,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
 
     if (media !== this.masterPlaylistLoader_.media()) {
       this.masterPlaylistLoader_.media(media);
-      this.mainSegmentLoader_.clearBuffer();
+      this.mainSegmentLoader_.resetMediaIndex();
     }
   }
 
@@ -571,9 +570,9 @@ export default class MasterPlaylistController extends videojs.EventTarget {
    * @return {TimeRange} the current time
    */
   setCurrentTime(currentTime) {
-    this.mainSegmentLoader_.clearBuffer();
+    this.mainSegmentLoader_.resetMediaIndex();
     if (this.audioPlaylistLoader_) {
-      this.audioSegmentLoader_.clearBuffer();
+      this.audioSegmentLoader_.resetMediaIndex();
     }
 
     let buffered = Ranges.findRange(this.tech_.buffered(), currentTime);

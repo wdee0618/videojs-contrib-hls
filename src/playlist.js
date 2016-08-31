@@ -290,7 +290,7 @@ export const getMediaIndexForTime_ = function(playlist, time, expired) {
   }
 
   // We are out of possible candidates so load the first one...
-  return 0;
+  return numSegments - 1;
 };
 
 Playlist.duration = duration;

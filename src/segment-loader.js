@@ -148,11 +148,6 @@ export default class SegmentLoader extends videojs.EventTarget {
    * and reset to a default state
    */
   abort() {
-    if (this.mediaIndex !== null) {
-      this.mediaIndex--;
-    }
-    this.currentTimeline_ = -1;
-
     if (this.state !== 'WAITING') {
       return;
     }
@@ -212,20 +207,15 @@ export default class SegmentLoader extends videojs.EventTarget {
    * @param {PlaylistLoader} media the playlist to set on the segment loader
    */
   playlist(media, options = {}) {
-    if (this.playlist_ &&
-        this.playlist_.uri === media.uri &&
-        this.mediaIndex !== null) {
-      let mediaSequenceDiff = media.mediaSequence - this.playlist_.mediaSequence;
+    if (this.mediaIndex !== null) {
+      if (this.playlist_ &&
+          this.playlist_.uri === media.uri) {
+        let mediaSequenceDiff = media.mediaSequence - this.playlist_.mediaSequence;
 
-      this.mediaIndex -= mediaSequenceDiff;
-    } else if (this.mediaSource_.duration === Infinity) {
-      if (this.mediaIndex !== null) {
-        this.mediaIndex -= 1;
+        this.mediaIndex -= mediaSequenceDiff;
+      } else if (this.mediaSource_.duration === Infinity) {
+        this.mediaIndex -= 3;
       }
-
-      // EXPERIMENTAL: Force a timestampOffset calculation when changing renditions
-      // in a live stream
-      //this.currentTimeline_ = -1;
     }
 
     this.playlist_ = media;
@@ -284,7 +274,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     // TODO Allow source buffers to be re-created with different mime-types
     if (!this.sourceUpdater_) {
       this.sourceUpdater_ = new SourceUpdater(this.mediaSource_, mimeType);
-      this.clearBuffer();
+      this.resetMediaIndex();
 
       // if we were unpaused but waiting for a sourceUpdater, start
       // buffering now
@@ -329,7 +319,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     let lastBufferedEnd = buffered.length
       ? buffered.end(buffered.length - 1)
       : 0;
-
+//console.log('cB_', mediaIndex, hasPlayed, currentTime, expired);
     if (!playlist.segments.length) {
       return;
     }
@@ -337,6 +327,7 @@ export default class SegmentLoader extends videojs.EventTarget {
     if (mediaIndex === null || buffered.length === 0) {
       // find the segment containing currentTime
       mediaIndex =  getMediaIndexForTime(playlist, currentTime, expired);
+//console.log('gMIFT', mediaIndex);
     } else {
       let bufferedTime = Math.max(0, lastBufferedEnd - currentTime);
 
@@ -353,6 +344,7 @@ export default class SegmentLoader extends videojs.EventTarget {
       }
 
       mediaIndex++;
+//console.log('++', mediaIndex);
     }
 
     let segment;
@@ -653,15 +645,9 @@ export default class SegmentLoader extends videojs.EventTarget {
   }
 
   /**
-   * clear anything that is currently in the buffer and throw it away
+   * Start fetching around currentTime again instead of doing mediaIndex++
    */
-  clearBuffer() {
-    let duration = this.mediaSource_.nativeMediaSource_.duration;
-
-    if (this.sourceUpdater_ &&
-        this.sourceUpdater_.buffered().length) {
-      this.sourceUpdater_.remove(Math.min(duration, this.currentTime_() + 5), Infinity);
-    }
+  resetMediaIndex() {
     this.mediaIndex = null;
   }
 

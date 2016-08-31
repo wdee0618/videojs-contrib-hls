@@ -221,18 +221,16 @@ export default class GapSkipper {
       return;
     }
 
-    //let difference = nextRange.start(0) - currentTime;
+    let difference = nextRange.start(0) - currentTime;
 
-    // this.logger_('setTimer_:',
-                 // 'stopped at:', currentTime,
-                 // 'setting timer for:', difference,
-                 // 'seeking to:', nextRange.start(0));
+    this.logger_('setTimer_:',
+                 'stopped at:', currentTime,
+                 'setting timer for:', difference,
+                 'seeking to:', nextRange.start(0));
 
-    // this.timer_ = setTimeout(this.skipTheGap_.bind(this),
-                             // difference * 1000,
-                             // currentTime);
-
-    this.skipTheGap_(currentTime);
+    this.timer_ = setTimeout(this.skipTheGap_.bind(this),
+                             difference * 1000,
+                             currentTime);
   }
 
   /**
