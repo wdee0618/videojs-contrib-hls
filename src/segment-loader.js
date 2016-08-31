@@ -315,11 +315,11 @@ export default class SegmentLoader extends videojs.EventTarget {
    * @returns {Object} a segment info object that describes the
    * request that should be made or null if no request is necessary
    */
-  checkBuffer_(buffered, playlist, mediaIndex, hasPlayed, currentTime, expired) {
+  checkBuffer_(buffered, playlist, mediaIndex, hasPlayed, currentTime, playedTime, expired) {
     let lastBufferedEnd = buffered.length
       ? buffered.end(buffered.length - 1)
       : 0;
-//console.log('cB_', mediaIndex, hasPlayed, currentTime, expired);
+//console.log('cB_', mediaIndex, hasPlayed, currentTime, playedTime, expired);
     if (!playlist.segments.length) {
       return;
     }
@@ -331,15 +331,15 @@ export default class SegmentLoader extends videojs.EventTarget {
     } else {
       let bufferedTime = Math.max(0, lastBufferedEnd - currentTime);
 
-      // if the video has not yet played once, and we already have
-      // one segment downloaded do nothing
-      if (!hasPlayed && bufferedTime >= 1) {
+      // if there is plenty of content buffered, and the video has
+      // been played before relax for awhile
+      if (playedTime <= playlist.segments[mediaIndex].duration) {
         return null;
       }
 
-      // if there is plenty of content buffered, and the video has
-      // been played before relax for awhile
-      if (hasPlayed && bufferedTime >= Config.GOAL_BUFFER_LENGTH) {
+      // if the video has not yet played once, and we already have
+      // one segment downloaded do nothing
+      if (!hasPlayed && bufferedTime >= 1) {
         return null;
       }
 
@@ -406,12 +406,18 @@ export default class SegmentLoader extends videojs.EventTarget {
       return;
     }
 
+    // Allow the fetcher to load a foward buffer of 30 seconds
+    if (this.mediaIndex === null) {
+      this.lastLoadTime_ = this.currentTime_() - 30;
+    }
+
     // see if we need to begin loading immediately
     let request = this.checkBuffer_(this.sourceUpdater_.buffered(),
                                     this.playlist_,
                                     this.mediaIndex,
                                     this.hasPlayed_(),
                                     this.currentTime_(),
+                                    this.currentTime_() - this.lastLoadTime_,
                                     this.expired_);
 
     if (!request) {
@@ -422,6 +428,9 @@ export default class SegmentLoader extends videojs.EventTarget {
     let startOfSegment = duration(this.playlist_,
                                   this.playlist_.mediaSequence + request.mediaIndex,
                                   this.expired_);
+
+    // resuce lastCurrentTime
+    this.lastLoadTime_ += segment.duration;
 
     // We will need to change timestampOffset of the sourceBuffer if either of
     // the following conditions are true:
@@ -651,9 +660,6 @@ export default class SegmentLoader extends videojs.EventTarget {
     this.mediaIndex = null;
   }
 
-  clearBuffer() {
-    this.sourceUpdater_.remove(0, Infinity);
-  }
   /**
    * Decrypt the segment that is being loaded if necessary
    *
