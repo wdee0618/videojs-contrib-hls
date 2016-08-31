@@ -408,7 +408,7 @@ export default class SegmentLoader extends videojs.EventTarget {
 
     // Allow the fetcher to load a foward buffer of 30 seconds
     if (this.mediaIndex === null) {
-      this.lastLoadTime_ = this.currentTime_() - 30;
+      this.lastLoadTime_ = this.currentTime_() - Config.GOAL_BUFFER_LENGTH;
     }
 
     // see if we need to begin loading immediately
