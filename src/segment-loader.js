@@ -651,6 +651,9 @@ export default class SegmentLoader extends videojs.EventTarget {
     this.mediaIndex = null;
   }
 
+  clearBuffer() {
+    this.sourceUpdater_.remove(0, Infinity);
+  }
   /**
    * Decrypt the segment that is being loaded if necessary
    *

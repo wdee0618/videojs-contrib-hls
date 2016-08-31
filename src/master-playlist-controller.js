@@ -570,8 +570,10 @@ export default class MasterPlaylistController extends videojs.EventTarget {
    * @return {TimeRange} the current time
    */
   setCurrentTime(currentTime) {
+    this.mainSegmentLoader_.clearBuffer();
     this.mainSegmentLoader_.resetMediaIndex();
     if (this.audioPlaylistLoader_) {
+      this.audioSegmentLoader_.clearBuffer();
       this.audioSegmentLoader_.resetMediaIndex();
     }
 
