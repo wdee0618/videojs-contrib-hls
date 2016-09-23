@@ -241,6 +241,11 @@ export default class MasterPlaylistController extends videojs.EventTarget {
            this.mainSegmentLoader_.mediaBytesTransferred;
   }
 
+  mediaSecondsLoaded_() {
+    return Math.max(this.audioSegmentLoader_.mediaSecondsLoaded_ +
+                    this.mainSegmentLoader_.mediaSecondsLoaded_);
+  }
+
   /**
    * fill our internal list of HlsAudioTracks with data from
    * the master playlist or use a default
@@ -344,7 +349,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
     let loader = track.getLoader(this.activeAudioGroup());
 
     if (!loader) {
-      this.mainSegmentLoader_.resetMediaIndex();
+      this.mainSegmentLoader_.resetEverything();
 
       return;
     }
@@ -356,7 +361,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
     if (this.audioPlaylistLoader_.started) {
       this.audioPlaylistLoader_.load();
       this.audioSegmentLoader_.load();
-      this.audioSegmentLoader_.resetMediaIndex();
+      this.audioSegmentLoader_.resetEverything();
       return;
     }
 
@@ -406,7 +411,7 @@ export default class MasterPlaylistController extends videojs.EventTarget {
       this.useAudio();
     });
 
-    this.audioSegmentLoader_.resetMediaIndex();
+    this.audioSegmentLoader_.resetEverything();
     this.audioPlaylistLoader_.start();
   }
 
@@ -423,7 +428,11 @@ export default class MasterPlaylistController extends videojs.EventTarget {
 
     if (media !== this.masterPlaylistLoader_.media()) {
       this.masterPlaylistLoader_.media(media);
-      this.mainSegmentLoader_.resetMediaIndex();
+
+      this.mainSegmentLoader_.resetFetcher();
+      if (this.audiosegmentloader_) {
+        this.audioSegmentLoader_.resetFetcher();
+      }
     }
   }
 
@@ -570,11 +579,6 @@ export default class MasterPlaylistController extends videojs.EventTarget {
    * @return {TimeRange} the current time
    */
   setCurrentTime(currentTime) {
-    this.mainSegmentLoader_.resetMediaIndex();
-    if (this.audioPlaylistLoader_) {
-      this.audioSegmentLoader_.resetMediaIndex();
-    }
-
     let buffered = Ranges.findRange(this.tech_.buffered(), currentTime);
 
     if (!(this.masterPlaylistLoader_ && this.masterPlaylistLoader_.media())) {
@@ -597,8 +601,10 @@ export default class MasterPlaylistController extends videojs.EventTarget {
     // cancel outstanding requests so we begin buffering at the new
     // location
     this.mainSegmentLoader_.abort();
+    this.mainSegmentLoader_.resetEverything();
     if (this.audioPlaylistLoader_) {
       this.audioSegmentLoader_.abort();
+      this.audioSegmentLoader_.resetEverything();
     }
 
     if (!this.tech_.paused()) {

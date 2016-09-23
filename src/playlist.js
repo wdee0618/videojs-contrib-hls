@@ -187,6 +187,15 @@ export const duration = function(playlist, endSequence, expired) {
                           expired);
 };
 
+export const sumDurations = function(playlist, startIndex, endIndex) {
+  let durations = 0;
+
+  for (let i = startIndex; i < endIndex; i++) {
+    durations += playlist.segments[i].duration;
+  }
+
+  return duration;
+};
 /**
   * Calculates the interval of time that is currently seekable in a
   * playlist. The returned time ranges are relative to the earliest
@@ -237,7 +246,7 @@ let isWholeNumber = function (num) {
 let ceilLeastSignificantDigit = function(num) {
   // If we have a whole number, just add 1 to it
   if (isWholeNumber(num)) {
-    return num + 1;
+    return num + 0.1;
   }
 
   let numDecimalDigits = num.toString().split('.')[1].length;
@@ -248,8 +257,26 @@ let ceilLeastSignificantDigit = function(num) {
 
     if (isWholeNumber(temp) ||
         i === numDecimalDigits) {
-      let scale = Math.pow(10, i);
-      return ((num * scale) + 1) / scale;
+      return (temp + 1) / scale;
+    }
+  }
+};
+
+let floorLeastSignificantDigit = function(num) {
+  // If we have a whole number, just add 1 to it
+  if (isWholeNumber(num)) {
+    return num - 0.1;
+  }
+
+  let numDecimalDigits = num.toString().split('.')[1].length;
+
+  for (let i = 1; i <= numDecimalDigits; i++) {
+    let scale = Math.pow(10, i);
+    let temp = num * scale;
+
+    if (isWholeNumber(temp) ||
+        i === numDecimalDigits) {
+      return (temp - 1) / scale;
     }
   }
 };
@@ -267,30 +294,54 @@ let ceilLeastSignificantDigit = function(num) {
  * @return {Number} The number of the media segment that contains
  * that time position.
  */
-export const getMediaIndexForTime_ = function(playlist, time, expired) {
+export const getMediaIndexForTime_ = function(playlist, time, startIndex, startTime) {
   let i;
   let segment;
   let numSegments = playlist.segments.length;
 
-  // We known nothing so walk from the front of the playlist,
-  // subtracting durations until we find a segment that contains
-  // time and return it
-  time = time - expired;
+  time = time - startTime;
 
   if (time < 0) {
-    return -1;
-  }
-
-  for (i = 0; i < numSegments; i++) {
-    segment = playlist.segments[i];
-    time -= Math.min(playlist.targetDuration + 0.1, ceilLeastSignificantDigit(segment.duration));
-    if (time < 0) {
-      return i;
+    // Walk backward from startIndex in the playlist, adding durations
+    // until we find a segment that contains `time` and return it
+    if (startIndex > 0) {
+      for (i = startIndex - 1; i >= 0; i--) {
+        segment = playlist.segments[i];
+        time += Math.min(floorLeastSignificantDigit(segment.duration));
+        console.log('time', time, i);
+        if (time > 0) {
+          return i;
+        }
+      }
     }
-  }
 
-  // We are out of possible candidates so load the first one...
-  return numSegments - 1;
+    // We were unable to find a good segment within the playlist
+    return 0;
+  } else {
+    // Walk forward from startIndex in the playlist, subtracting durations
+    // until we find a segment that contains `time` and return it
+    if (startIndex < 0) {
+      for (i = startIndex; i < 0; i++) {
+      time -= playlist.targetDuration + 0.1;
+        if (time < 0) {
+          // We were unable to find a good segment within the playlist
+          return 0;
+        }
+      }
+      startIndex = 0;
+    }
+
+    for (i = startIndex; i < numSegments; i++) {
+      segment = playlist.segments[i];
+      time -= Math.min(ceilLeastSignificantDigit(segment.duration));
+      if (time < 0) {
+        return i;
+      }
+    }
+
+    // We are out of possible candidates so load the first one...
+    return numSegments - 1;
+  }
 };
 
 Playlist.duration = duration;
